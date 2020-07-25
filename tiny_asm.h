@@ -36,46 +36,46 @@ enum InstructMod {
 };
 enum InstrParamType {
     ParamNone = 0,
-    ParamST0 = 1 << 4,
-    ParamSTi = 1 << 5,
-    ParamImm = 1 << 6,
-    ParamRel = 1 << 7,
-    ParamReg = 1 << 8,
-    ParamMem = 1 << 9,
-    ParamMM = 1 << 10,
-    ParamXMM = 1 << 11,
-    ParamForce = 1 << 12,
-    ParamRegA = 1 << 13  | ParamForce | ParamReg,
-    ParamRegAL = ParamRegA | Size8,
-    ParamRegAX = ParamRegA | Size16,
-    ParamRegEAX = ParamRegA | Size32,
-    ParamRegRAX = ParamRegA | Size64,
-    ParamRegC = 1 << 14 | ParamForce | ParamReg,
-    ParamRegCL = ParamRegC | Size8,
-    ParamValue1 = 1 << 16 | ParamImm | ParamForce,
-    ParamValue3 = 1 << 17 | ParamImm | ParamForce,
-    ParamValuen = 1 << 18 | ParamImm | ParamForce,
-    ParamMMMem = ParamMM | ParamMem,
-    ParamXMMMem = ParamXMM | ParamMem,
-    ParamImm8 = ParamImm | Size8,
-    ParamImm16 = ParamImm | Size16,
-    ParamImm32 = ParamImm | Size32,
-    ParamReg8 = ParamReg | Size8,
-    ParamReg16 = ParamReg | Size16,
-    ParamReg32 = ParamReg | Size32,
-    ParamReg64 = ParamReg | Size64,
-    ParamMem8 = ParamMem | Size8,
-    ParamMem16 = ParamMem | Size16,
-    ParamMem32 = ParamMem | Size32,
-    ParamMem64 = ParamMem | Size64,
-    ParamRel8 = ParamRel | Size8,
-    ParamRel16 = ParamRel | Size16,
-    ParamRel32 = ParamRel | Size32,
-    ParamRM = ParamReg | ParamMem,
-    ParamRM8 = ParamReg8 | ParamMem8,
-    ParamRM16 = ParamReg16 | ParamMem16,
-    ParamRM32 = ParamReg32 | ParamMem32,
-    ParamRM64 = ParamReg64 | ParamMem64,
+    ParamST0 = (1 << 4),
+    ParamSTi = (1 << 5) | ParamST0,
+    ParamImm = (1 << 6),
+    ParamRel = (1 << 7),
+    ParamReg = (1 << 8),
+    ParamMem = (1 << 9),
+    ParamMM = (1 << 10),
+    ParamXMM = (1 << 11),
+    ParamForce = (1 << 12),
+    ParamRegA = (1 << 13)  | ParamForce | ParamReg,
+    ParamRegAL = (ParamRegA | Size8),
+    ParamRegAX = (ParamRegA | Size16),
+    ParamRegEAX = (ParamRegA | Size32),
+    ParamRegRAX = (ParamRegA | Size64),
+    ParamRegC = (1 << 14) | ParamForce | ParamReg,
+    ParamRegCL = ((ParamRegC) | Size8),
+    ParamValue1 = (1 << 16) | ParamImm | ParamForce,
+    ParamValue3 = (1 << 17) | ParamImm | ParamForce,
+    ParamValuen = (1 << 18) | ParamImm | ParamForce,
+    ParamMMMem = ((ParamMM) | ParamMem),
+    ParamXMMMem = ((ParamXMM) | ParamMem),
+    ParamImm8 = ((ParamImm) | Size8),
+    ParamImm16 = ((ParamImm) | Size16),
+    ParamImm32 = ((ParamImm) | Size32),
+    ParamReg8 = ((ParamReg) | Size8),
+    ParamReg16 = ((ParamReg) | Size16),
+    ParamReg32 = ((ParamReg) | Size32),
+    ParamReg64 = ((ParamReg) | Size64),
+    ParamMem8 = ((ParamMem) | Size8),
+    ParamMem16 = ((ParamMem) | Size16),
+    ParamMem32 = ((ParamMem) | Size32),
+    ParamMem64 = ((ParamMem) | Size64),
+    ParamRel8 = ((ParamRel) | Size8),
+    ParamRel16 = ((ParamRel) | Size16),
+    ParamRel32 = ((ParamRel) | Size32),
+    ParamRM = ((ParamReg) | ParamMem),
+    ParamRM8 = ((ParamReg8) | ParamMem8),
+    ParamRM16 = ((ParamReg16) | ParamMem16),
+    ParamRM32 = ((ParamReg32) | ParamMem32),
+    ParamRM64 = ((ParamReg64) | ParamMem64),
 };
 enum class RegID {
     ax,
@@ -135,6 +135,22 @@ enum class RegID {
     xmm5 = r5,
     xmm6 = r6,
     xmm7 = r7,
+    mm0 = r0,
+    mm1 = r1,
+    mm2 = r2,
+    mm3 = r3,
+    mm4 = r4,
+    mm5 = r5,
+    mm6 = r6,
+    mm7 = r7,
+    st0 = r0,
+    st1 = r1,
+    st2 = r2,
+    st3 = r3,
+    st4 = r4,
+    st5 = r5,
+    st6 = r6,
+    st7 = r7,
     /*ModRM_RM_Disp16 = r6, // 16位
     ModRM_RM_bx_si = r0,
     ModRM_RM_bx_di = r1,
@@ -180,10 +196,48 @@ constexpr uint32_t DispByte(uint64_t disp) {
 constexpr uint32_t ValidByte(uint8_t bytes) {
     return (1 << (bytes * 8));
 }
+constexpr uint32_t CountByte(uint64_t value) {
+    if (!value)
+        return 0;
+    if (value < 0x100)
+        return 1;
+    if (value < 0x10000)
+        return 2;
+    if (value < 0x1000000)
+        return 3;
+    if (value < 0x100000000)
+        return 4;
+    return 0;
+}
+
 constexpr SizeBit ParamSize(int type) {
     return (SizeBit) (type & 0b1111);
 }
 
+struct STReg {
+    RegID reg;
+    STReg() = default;
+    STReg(RegID reg) : reg(reg) {}
+    inline InstrParamType type() const {
+        if (reg == RegID::st0) {
+            return (InstrParamType) (ParamST0);
+        }
+        return (InstrParamType) (ParamSTi);
+    }
+};
+struct MMReg {
+    RegID reg;
+    MMReg() = default;
+    MMReg(RegID reg) : reg(reg) {}
+    inline InstrParamType type() const { return ParamMM; }
+};
+struct XMMReg {
+    RegID reg;
+    XMMReg() = default;
+    XMMReg(RegID reg) : reg(reg) {}
+    inline InstrParamType type() const { return ParamXMM; }
+
+};
 struct Register {
     SizeBit size;
     RegID reg;
@@ -250,11 +304,9 @@ struct Address {
     inline bool need_SIB() const {
         return !(index.empty() && base.reg != RegID::ModRM_RM_EnableSIB);
     }
-    inline bool need_disp() const {
-        return DispByte(disp) >= 1;
-    }
+    inline bool need_disp() const { return DispSize(disp) >= Size8; }
     inline uint8_t *disp_begin() const { return (uint8_t *) (&disp); }
-    inline uint8_t *disp_end() const { return disp_begin() + DispByte(disp); }
+    inline uint8_t *disp_end() const { return disp_begin() + SizeBitByte(DispSize(disp)); }
     inline bool is_valid() {
         if (index.size != Size0) {
             return index.size == base.size;
@@ -337,17 +389,8 @@ struct X64Instruct {
     inline bool need_REX_W() { return (mod & SizeModREX); }
     inline bool need_ModRM() { return (op1 & ParamReg) || (op2 & ParamReg) || (op3 & ParamReg); }
     inline bool need_Reg() { return mod & SizeModReg; }
-    inline SizeBit size() { return DispSize(opcode); }
-    inline uint32_t length() {
-        switch (DispSize(opcode)) {
-            case Size0: return 0;
-            case Size8: return 1;
-            case Size16: return 2;
-            case Size32: return 4;
-            case Size64: return 8;
-        }
-        return 0;
-    }
+    inline bool need_Flt() { return mod & SizeModFlt; }
+    inline uint32_t length() { return CountByte(opcode); }
     inline uint8_t *begin() { return (uint8_t *) (&opcode); }
     inline uint8_t *end() { return begin() + length(); }
     X64Instruct operator+(RegID id) {
@@ -358,8 +401,8 @@ static X64Instruct Instructs[] = {
     #include "instructions.h"
 };
 inline bool IsMatch(int op, int your) {
-    if ((op & ParamMem) && (ParamSize(op) == Size0)) {
-        return (your & ParamMem);
+    if ((op & ParamMem) && (ParamSize(op) == Size0) && (your & ParamMem)) {
+        return true;
     }
     if ((your & (ParamForce | ParamReg)) == (ParamForce | ParamReg)) {
         return ((op & ParamReg) == ParamReg) && (ParamSize(your) == ParamSize(op));
@@ -401,6 +444,52 @@ constexpr uint8_t NeedREXPrefix(bool W, RegID reg = RegID::ax, RegID base = RegI
 }
 constexpr uint8_t OperandOverridePrefix = 0x66;
 constexpr uint8_t AddressOverridePrefix = 0x67;
+
+template<class Container>
+void EmitInst(Container &bytes, X64Instruct ins, STReg &r) {
+    if (ins.need_Flt()) {
+        ins.opcode = ins.opcode + ((uint32_t) (r.reg) << 7);
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    }
+}
+template<class Container>
+void EmitInst(Container &bytes, X64Instruct ins, STReg &r, STReg &m) {
+    if (ins.need_Flt()) {
+        if (ins.op1 == ParamST0) {
+            ins.opcode = ins.opcode + ((uint32_t) (m.reg) << 8);
+        } else {
+            ins.opcode = ins.opcode + ((uint32_t) (r.reg) << 8);
+        }
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    }
+}
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m) {
+    bytes.insert(bytes.end(), ins.begin(), ins.end());
+    bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg));
+}
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, Address &m) {
+    EMIT_ASSERT(m.is_valid(), "Invalid Addressing!");
+    if (NeedREXPrefix(ins.need_REX_W(), r.reg, m.base.reg, m.index.reg)) {
+        bytes.push_back(REXPrefix(ins.need_REX_W(), r.reg, m.base.reg, m.index.reg));
+    }
+    bytes.insert(bytes.end(), ins.begin(), ins.end());
+    if (m.need_SIB()) {
+        bytes.push_back(ModRM(m.get_mode(), r.reg, RegID::ModRM_RM_EnableSIB));
+        bytes.push_back(SIB(m.base.reg, m.index.reg, m.scale));
+    } else {
+        bytes.push_back(ModRM(m.get_mode(), r.reg, m.base.reg));
+    }
+    if (m.need_disp()) {
+        bytes.insert(bytes.end(), m.disp_begin(), m.disp_end());
+    }
+}
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, Address &m, R &r) {
+    EmitInst(bytes, ins, r, m);
+}
+
 template<class Container>
 void EmitInst(Container &bytes, X64Instruct ins) {
     if (ins.need_REX_W()) {

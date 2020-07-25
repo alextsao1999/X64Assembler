@@ -13,7 +13,7 @@ int main() {
     Emit(bytes, "call", Register::rax());
     Emit(bytes, "leave");
     Emit(bytes, "ret", Immdiate::Word(4));*/
-    Emit(bytes, "fadd", Address::DWord(4, Register::eax(), Register::ebx()));
+    Emit(bytes, "movss", XMMReg(RegID::xmm0), XMMReg(RegID::xmm1));
 
     for (auto &byte : bytes) {
         std::cout << (int) byte << ",";
