@@ -127,6 +127,14 @@ enum class RegID {
     ch = r5,
     dh = r6,
     bh = r7,
+    xmm0 = r0,
+    xmm1 = r1,
+    xmm2 = r2,
+    xmm3 = r3,
+    xmm4 = r4,
+    xmm5 = r5,
+    xmm6 = r6,
+    xmm7 = r7,
     /*ModRM_RM_Disp16 = r6, // 16位
     ModRM_RM_bx_si = r0,
     ModRM_RM_bx_di = r1,
@@ -203,6 +211,8 @@ struct Register {
     constexpr static Register ebx() { return {SizeBit::Size32, RegID::bx}; }
     constexpr static Register ecx() { return {SizeBit::Size32, RegID::cx}; }
     constexpr static Register edx() { return {SizeBit::Size32, RegID::dx}; }
+    constexpr static Register esp() { return {SizeBit::Size32, RegID::sp}; }
+    constexpr static Register ebp() { return {SizeBit::Size32, RegID::bp}; }
     constexpr static Register rax() { return {SizeBit::Size64, RegID::ax}; }
     constexpr static Register rbx() { return {SizeBit::Size64, RegID::bx}; }
     constexpr static Register rcx() { return {SizeBit::Size64, RegID::cx}; }
@@ -252,16 +262,16 @@ struct Address {
             return base.size != Size0;
         }
     }
-    static Address Byte(int32_t disp, Register base, Register index = Register(), Scale scale = Scale1) {
+    static Address Byte(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size8, base, index, scale, disp};
     }
-    static Address Word(int32_t disp, Register base, Register index = Register(), Scale scale = Scale1) {
+    static Address Word(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size16, base, index, scale, disp};
     }
-    static Address DWord(int32_t disp, Register base, Register index = Register(), Scale scale = Scale1) {
+    static Address DWord(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size32, base, index, scale, disp};
     }
-    static Address QWord(int32_t disp, Register base, Register index = Register(), Scale scale = Scale1) {
+    static Address QWord(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size64, base, index, scale, disp};
     }
 };
@@ -289,20 +299,25 @@ struct Immdiate {
     static inline Immdiate Byte(int32_t imm) { return {imm, Size8}; }
     static inline Immdiate Word(int32_t imm) { return {imm, Size16}; }
     static inline Immdiate DWord(int32_t imm) { return {imm, Size32}; }
-    static inline Immdiate QWord(int32_t imm) { return {imm, Size64}; }
 };
 struct RelOffset {
+    SizeBit size;
     int32_t offset;
-    RelOffset(int32_t offset) : offset(offset) {
+    RelOffset(int32_t offset, SizeBit size = Size0) : offset(offset) {
+        this->size = size;
+        this->offset = offset;
+        if (size == Size0) {
+            this->size = DispSize(offset);
+        }
         if (offset < 0) {
-            this->offset = ValidByte(DispByte(-offset)) + offset;
+            this->offset = (ValidByte(SizeBitByte(this->size)) + offset);
         }
     }
     inline InstrParamType type() const {
-        return (InstrParamType) (ParamRel | DispSize(offset));
+        return (InstrParamType) (ParamRel | size);
     }
     inline uint32_t length() const {
-        return DispByte(offset);
+        return SizeBitByte(size);
     }
     inline uint8_t *begin() const { return (uint8_t *) (&offset); }
     inline uint8_t *end() const { return begin() + length(); }
@@ -431,9 +446,6 @@ void EmitInst(Container &bytes, X64Instruct ins, const Address &r) {
     if (ins.need_Reg()) {
         EMIT_ASSERT(false, "not handle the reg");
     } else if (ins.need_ModRM()) {
-        //01 000 100 => 01 110(6) 101(5)
-        //r4 = sp,
-        //r5 = bp,
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         if (r.need_SIB()) {
             bytes.push_back(ModRM(r.get_mode(), RegID::ax, RegID::ModRM_RM_EnableSIB));
