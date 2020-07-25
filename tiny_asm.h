@@ -5,7 +5,7 @@
 #ifndef X64ASSEMBLER_TINY_ASM_H
 #define X64ASSEMBLER_TINY_ASM_H
 
-#define EMIT_ASSERT(cond, msg) if (!(cond)) std::cout << msg;
+#define EMIT_ASSERT(cond, msg) if (!(cond)) std::cout << "assert error! "<< msg << "\n" << __FILE__ << ":" << __LINE__ ;
 
 enum Mode {
     Mode_Mem,
@@ -161,6 +161,7 @@ enum class RegID {
     ModRM_RM_bp = r6,
     ModRM_RM_bx = r7,*/
 };
+
 constexpr SizeBit DispSize(uint64_t disp) {
     if (!disp)
         return SizeBit::Size0;
@@ -209,7 +210,6 @@ constexpr uint32_t CountByte(uint64_t value) {
         return 4;
     return 0;
 }
-
 constexpr SizeBit ParamSize(int type) {
     return (SizeBit) (type & 0b1111);
 }
@@ -235,8 +235,8 @@ struct XMMReg {
     RegID reg;
     XMMReg() = default;
     XMMReg(RegID reg) : reg(reg) {}
+    XMMReg(int reg) : reg((RegID)reg) {}
     inline InstrParamType type() const { return ParamXMM; }
-
 };
 struct Register {
     SizeBit size;
@@ -375,7 +375,10 @@ struct RelOffset {
     inline uint8_t *end() const { return begin() + length(); }
 
 };
-
+using Reg = Register;
+using Addr = Address;
+using Imm = Immdiate;
+using Rel = RelOffset;
 struct X64Instruct {
     const char *name;
     int mod;
@@ -387,7 +390,9 @@ struct X64Instruct {
     inline bool empty() { return !opcode; }
     inline bool need_Override() { return (mod & SizeModOvrd); }
     inline bool need_REX_W() { return (mod & SizeModREX); }
-    inline bool need_ModRM() { return (op1 & ParamReg) || (op2 & ParamReg) || (op3 & ParamReg); }
+    inline bool need_ModRM() {
+        return (op1 & ParamReg) || (op2 & ParamReg) || (op3 & ParamReg);
+    }
     inline bool need_Reg() { return mod & SizeModReg; }
     inline bool need_Flt() { return mod & SizeModFlt; }
     inline uint32_t length() { return CountByte(opcode); }
@@ -446,51 +451,6 @@ constexpr uint8_t OperandOverridePrefix = 0x66;
 constexpr uint8_t AddressOverridePrefix = 0x67;
 
 template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, STReg &r) {
-    if (ins.need_Flt()) {
-        ins.opcode = ins.opcode + ((uint32_t) (r.reg) << 7);
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-    }
-}
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, STReg &r, STReg &m) {
-    if (ins.need_Flt()) {
-        if (ins.op1 == ParamST0) {
-            ins.opcode = ins.opcode + ((uint32_t) (m.reg) << 8);
-        } else {
-            ins.opcode = ins.opcode + ((uint32_t) (r.reg) << 8);
-        }
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-    }
-}
-template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m) {
-    bytes.insert(bytes.end(), ins.begin(), ins.end());
-    bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg));
-}
-template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, Address &m) {
-    EMIT_ASSERT(m.is_valid(), "Invalid Addressing!");
-    if (NeedREXPrefix(ins.need_REX_W(), r.reg, m.base.reg, m.index.reg)) {
-        bytes.push_back(REXPrefix(ins.need_REX_W(), r.reg, m.base.reg, m.index.reg));
-    }
-    bytes.insert(bytes.end(), ins.begin(), ins.end());
-    if (m.need_SIB()) {
-        bytes.push_back(ModRM(m.get_mode(), r.reg, RegID::ModRM_RM_EnableSIB));
-        bytes.push_back(SIB(m.base.reg, m.index.reg, m.scale));
-    } else {
-        bytes.push_back(ModRM(m.get_mode(), r.reg, m.base.reg));
-    }
-    if (m.need_disp()) {
-        bytes.insert(bytes.end(), m.disp_begin(), m.disp_end());
-    }
-}
-template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, Address &m, R &r) {
-    EmitInst(bytes, ins, r, m);
-}
-
-template<class Container>
 void EmitInst(Container &bytes, X64Instruct ins) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
@@ -513,13 +473,16 @@ void EmitInst(Container &bytes, X64Instruct ins, const RelOffset &rel) {
     bytes.insert(bytes.end(), ins.begin(), ins.end());
     bytes.insert(bytes.end(), rel.begin(), rel.end());
 }
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, const Register &r) {
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, const R &r) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
     if (ins.need_Reg()) {
         ins = ins + r.reg;
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    } else if (ins.need_Flt()) {
+        ins.opcode = ins.opcode + ((uint32_t) (r.reg) << 7);
         bytes.insert(bytes.end(), ins.begin(), ins.end());
     } else if (ins.need_ModRM()) {
         bytes.insert(bytes.end(), ins.begin(), ins.end());
@@ -547,45 +510,17 @@ void EmitInst(Container &bytes, X64Instruct ins, const Address &r) {
         }
     }
 }
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, Register &r, Immdiate &m) {
-    if (ins.need_REX_W()) {
-        bytes.push_back(REXPrefix(ins.need_REX_W()));
-    }
-    if (ins.need_Reg()) {
-        ins = ins + r.reg;
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-    } else if (ins.need_ModRM()) {
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-        bytes.push_back(ModRM(Mode_Reg, r.reg));
-    }
-    bytes.insert(bytes.end(), m.begin(), m.end());
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, Address &m, R &r) {
+    EmitInst(bytes, ins, r, m);
 }
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, Register &r, Register &m) {
-    if (ins.need_Reg()) {
-        if (ins.op1 & ParamForce) {
-            ins = ins + r.reg;
-        } else {
-            ins = ins + m.reg;
-        }
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-    } else if (ins.need_ModRM()) {
-        EMIT_ASSERT((r.reg != m.reg), "same register error");
-        if (NeedREXPrefix(ins.need_REX_W(), r.reg)) {
-            bytes.push_back(REXPrefix(ins.need_REX_W(), r.reg, m.reg));
-        }
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-        bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg)); // Reg模式不需要Enable SIB
-    }
-}
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, Register &r, Address &m) {
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, Address &m) {
     if (ins.need_Reg()) {
         ins = ins + r.reg;
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         std::cout << "r-a-addressing" << std::endl;
-    } else if (ins.need_ModRM()) {
+    } else {
         EMIT_ASSERT(m.is_valid(), "Invalid Addressing!");
         if ((m.base.size == Size32) || (m.index.size == Size32)) {
             // 32位转为64位
@@ -606,14 +541,53 @@ void EmitInst(Container &bytes, X64Instruct ins, Register &r, Address &m) {
         }
     }
 }
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, Register &r, Register &m, Immdiate &imm) {
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, Immdiate &m) {
+    if (ins.need_REX_W()) {
+        bytes.push_back(REXPrefix(ins.need_REX_W()));
+    }
+    if (ins.need_Reg()) {
+        ins = ins + r.reg;
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    } else if (ins.need_ModRM()) {
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        bytes.push_back(ModRM(Mode_Reg, r.reg));
+    }
+    bytes.insert(bytes.end(), m.begin(), m.end());
+}
+template<class Container, class R>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m) {
+    if (ins.need_Reg()) {
+        if (ins.op1 & ParamForce) {
+            ins = ins + r.reg;
+        } else {
+            ins = ins + m.reg;
+        }
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    } else if(ins.need_Flt()) {
+        if (ins.op1 == ParamST0) {
+            ins.opcode = ins.opcode + (((uint32_t) (m.reg)) << 8);
+        } else {
+            ins.opcode = ins.opcode + (((uint32_t) (r.reg)) << 8);
+        }
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    } else if (ins.need_ModRM()) {
+        EMIT_ASSERT((r.reg != m.reg), "same register error");
+        if (NeedREXPrefix(ins.need_REX_W(), r.reg)) {
+            bytes.push_back(REXPrefix(ins.need_REX_W(), r.reg, m.reg));
+        }
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg)); // Reg模式不需要Enable SIB
+    } else {
+        //EMIT_ASSERT(false, "error");
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg));
+    }
+}
+template<class Container, class R, class V>
+void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m, V &imm) {
     EmitInst(bytes, ins, r, m);
     bytes.insert(bytes.end(), imm.begin(), imm.end());
-}
-template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, Address &m, Register &r) {
-    EmitInst(bytes, ins, r, m);
 }
 
 template<class T, class ...K>
