@@ -1,3 +1,3 @@
 cmake_minimum_required(VERSION 3.16)
-project(x64assembler)
-add_executable(assembler main.cpp)
+project(ggvm)
+add_executable(ggvm main.cpp)
