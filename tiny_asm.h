@@ -25,7 +25,7 @@ enum SizeBit {
     Size16 = 1 << 1,
     Size32 = 1 << 2,
     Size64 = 1 << 3,
-    SizeAll = 1 | (1 << 1) | (1 << 2) | (1 << 3)
+    //SizeAll = 1 | (1 << 1) | (1 << 2) | (1 << 3)
 };
 enum InstructMod {
     SizeModNone = 0,
@@ -312,7 +312,7 @@ struct Address {
     }
 };
 struct Immdiate {
-    SizeBit size;
+    mutable SizeBit size;
     int32_t immdiate;
     Immdiate(int32_t immdiate, SizeBit size = Size0) {
         this->size = size;
@@ -330,6 +330,11 @@ struct Immdiate {
     inline uint32_t length() const {
         return SizeBitByte(size);
     }
+    inline void expand(SizeBit sz) const {
+        if (sz > size) {
+            size = sz;
+        }
+    }
     inline uint8_t *begin() const { return (uint8_t *) (&immdiate); }
     inline uint8_t *end() const { return begin() + length(); }
     template <class T>
@@ -340,7 +345,7 @@ struct Immdiate {
     static inline Immdiate dword(const T &imm) { return {(int32_t) imm, Size32}; }
 };
 struct RelOffset {
-    SizeBit size;
+    mutable SizeBit size;
     int32_t offset;
     RelOffset(int32_t offset, SizeBit size = Size0) : offset(offset) {
         this->size = size;
@@ -360,6 +365,11 @@ struct RelOffset {
     }
     uint8_t *begin() const { return (uint8_t *) (&offset); }
     uint8_t *end() const { return begin() + length(); }
+    inline void expand(SizeBit sz) const {
+        if (sz > size) {
+            size = sz;
+        }
+    }
 };
 struct X64Instruct {
     const char *name;
@@ -373,6 +383,9 @@ struct X64Instruct {
     inline bool need_Override() { return (mod & SizeModOvrd); }
     inline bool need_REX_W() { return (mod & SizeModREX); }
     inline bool need_ModRM() {
+        if ((op1 & ParamForce) || (op2 & ParamForce)|| (op3 & ParamForce)) {
+            return false;
+        }
         return (op1 & ParamReg) || (op2 & ParamReg) || (op3 & ParamReg);
     }
     inline bool need_Reg() { return mod & SizeModReg; }
@@ -448,6 +461,7 @@ inline void EmitInst(Container &bytes, X64Instruct ins, const Immdiate &m) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
     bytes.insert(bytes.end(), ins.begin(), ins.end());
+    m.expand(ParamSize(ins.op1));
     bytes.insert(bytes.end(), m.begin(), m.end());
 }
 template<class Container>
@@ -456,7 +470,31 @@ inline void EmitInst(Container &bytes, X64Instruct ins, const RelOffset &rel) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
     bytes.insert(bytes.end(), ins.begin(), ins.end());
+    //rel.expand(ParamSize(ins.op1));
     bytes.insert(bytes.end(), rel.begin(), rel.end());
+}
+template<class Container, class R>
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Immdiate &m) {
+    if (ins.need_REX_W()) {
+        bytes.push_back(REXPrefix(ins.need_REX_W()));
+    }
+    if (ins.need_Reg()) {
+        auto re_ins = ins + r.reg;
+        bytes.insert(bytes.end(), re_ins.begin(), re_ins.end());
+    } else if (ins.need_ModRM()) {
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        bytes.push_back(ModRM(Mode_Reg, r.reg));
+    } else {
+        bytes.insert(bytes.end(), ins.begin(), ins.end());
+    }
+    //m.expand(ParamSize(ins.op2));
+    bytes.insert(bytes.end(), m.begin(), m.end());
+}
+template<class Container, class R1, class R2, class V>
+inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m, V &imm) {
+    EmitInst(bytes, ins, r, m);
+    imm.expand(ParamSize(ins.op3));
+    bytes.insert(bytes.end(), imm.begin(), imm.end());
 }
 template<class Container, class R>
 inline void EmitInst(Container &bytes, X64Instruct ins, const R &r) {
@@ -526,20 +564,6 @@ inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Addres
         }
     }
 }
-template<class Container, class R>
-inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Immdiate &m) {
-    if (ins.need_REX_W()) {
-        bytes.push_back(REXPrefix(ins.need_REX_W()));
-    }
-    if (ins.need_Reg()) {
-        auto re_ins = ins + r.reg;
-        bytes.insert(bytes.end(), re_ins.begin(), re_ins.end());
-    } else if (ins.need_ModRM()) {
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
-        bytes.push_back(ModRM(Mode_Reg, r.reg));
-    }
-    bytes.insert(bytes.end(), m.begin(), m.end());
-}
 template<class Container, class R1, class R2>
 inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m) {
     if(ins.need_Flt()) {
@@ -561,11 +585,6 @@ inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg));
     }
-}
-template<class Container, class R1, class R2, class V>
-inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m, V &imm) {
-    EmitInst(bytes, ins, r, m);
-    bytes.insert(bytes.end(), imm.begin(), imm.end());
 }
 
 template<class T, class ...K>
@@ -621,6 +640,7 @@ namespace Emitter {
     using imm = Immdiate;
     using rel = RelOffset;
     using xmm = XMMReg;
+    using st = STReg;
     using mm = MMReg;
 }
 

@@ -11,10 +11,6 @@ int main() {
     Emit(bytes, "push", imm::dword(1234));
     Emit(bytes, "leave");
     Emit(bytes, "ret", imm::word(4));
-    // constexpr instruction
-    auto instr = GetInstruct("add", ParamReg64, ParamImm32);
-    instr.emit(bytes, rax, imm::dword(1234));
-
     std::cout << "uint8_t codes[] = {";
     for (auto &byte : bytes) {
         std::cout << (int) byte ;
