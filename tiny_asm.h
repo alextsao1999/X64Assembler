@@ -24,7 +24,8 @@ enum SizeBit {
     Size8 = 1,
     Size16 = 1 << 1,
     Size32 = 1 << 2,
-    Size64 = 1 << 3
+    Size64 = 1 << 3,
+    SizeAll = 1 | (1 << 1) | (1 << 2) | (1 << 3)
 };
 enum InstructMod {
     SizeModNone = 0,
@@ -161,7 +162,6 @@ enum class RegID {
     ModRM_RM_bp = r6,
     ModRM_RM_bx = r7,*/
 };
-
 constexpr SizeBit DispSize(uint64_t disp) {
     if (!disp)
         return SizeBit::Size0;
@@ -212,6 +212,9 @@ constexpr uint32_t CountByte(uint64_t value) {
 }
 constexpr SizeBit ParamSize(int type) {
     return (SizeBit) (type & 0b1111);
+}
+constexpr bool StringEquals(char const * a, char const * b) {
+    return *a == *b && (*a == '\0' || StringEquals(a + 1, b + 1));
 }
 
 struct STReg {
@@ -310,7 +313,7 @@ struct Address {
     inline bool need_disp() const { return DispSize(disp) >= Size8; }
     inline uint8_t *disp_begin() const { return (uint8_t *) (&disp); }
     inline uint8_t *disp_end() const { return disp_begin() + SizeBitByte(DispSize(disp)); }
-    inline bool is_valid() {
+    inline bool is_valid() const {
         if (index.size != Size0) {
             return index.size == base.size;
         } else {
@@ -404,11 +407,15 @@ struct X64Instruct {
     X64Instruct operator+(RegID id) {
         return {name, mod, reg_op_extern, opcode + (uint32_t) id, op1, op2, op3};
     }
+
+    template<class T, class ...OpType>
+    inline void emit(T &buffer, OpType ...args);
 };
+
 static X64Instruct Instructs[] = {
     #include "instructions.h"
 };
-inline bool IsMatch(int op, int your) {
+constexpr bool IsMatch(int op, int your) {
     if ((op & ParamMem) && (ParamSize(op) == Size0) && (your & ParamMem)) {
         return true;
     }
@@ -418,9 +425,9 @@ inline bool IsMatch(int op, int your) {
         return ((op & your) == your) && (ParamSize(your) == ParamSize(op));
     }
 }
-X64Instruct GetInstruct(const char *name, InstrParamType op1 = ParamNone, InstrParamType op2 = ParamNone, InstrParamType op3 = ParamNone) {
-    for (auto &instr : Instructs) {
-        if (strcmp(instr.name, name) == 0) {
+constexpr X64Instruct GetInstruct(const char *name, InstrParamType op1 = ParamNone, InstrParamType op2 = ParamNone, InstrParamType op3 = ParamNone) {
+    for (auto instr : Instructs) {
+        if (StringEquals(instr.name, name)) {
             if (IsMatch(instr.op1, op1) && IsMatch(instr.op2, op2) && IsMatch(instr.op3, op3)) {
                 return instr;
             }
@@ -454,14 +461,14 @@ constexpr uint8_t OperandOverridePrefix = 0x66;
 constexpr uint8_t AddressOverridePrefix = 0x67;
 
 template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins) {
+inline void EmitInst(Container &bytes, X64Instruct ins) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
     bytes.insert(bytes.end(), ins.begin(), ins.end());
 }
 template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, const Immdiate &m) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const Immdiate &m) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
@@ -469,7 +476,7 @@ void EmitInst(Container &bytes, X64Instruct ins, const Immdiate &m) {
     bytes.insert(bytes.end(), m.begin(), m.end());
 }
 template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, const RelOffset &rel) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const RelOffset &rel) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
@@ -477,7 +484,7 @@ void EmitInst(Container &bytes, X64Instruct ins, const RelOffset &rel) {
     bytes.insert(bytes.end(), rel.begin(), rel.end());
 }
 template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, const R &r) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
@@ -491,10 +498,9 @@ void EmitInst(Container &bytes, X64Instruct ins, const R &r) {
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         bytes.push_back(ModRM(Mode_Reg, RegID::r2, r.reg));
     }
-
 }
 template<class Container>
-void EmitInst(Container &bytes, X64Instruct ins, const Address &r) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const Address &r) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
@@ -517,11 +523,11 @@ void EmitInst(Container &bytes, X64Instruct ins, const Address &r) {
     }
 }
 template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, Address &m, R &r) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const Address &m, const R &r) {
     EmitInst(bytes, ins, r, m);
 }
 template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, Address &m) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Address &m) {
     if (ins.need_Reg()) {
         EMIT_ASSERT(false, "Invalid Reg Addr!");
     } else {
@@ -546,13 +552,13 @@ void EmitInst(Container &bytes, X64Instruct ins, R &r, Address &m) {
     }
 }
 template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, Immdiate &m) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Immdiate &m) {
     if (ins.need_REX_W()) {
         bytes.push_back(REXPrefix(ins.need_REX_W()));
     }
     if (ins.need_Reg()) {
-        ins = ins + r.reg;
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        auto re_ins = ins + r.reg;
+        bytes.insert(bytes.end(), re_ins.begin(), re_ins.end());
     } else if (ins.need_ModRM()) {
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         bytes.push_back(ModRM(Mode_Reg, r.reg));
@@ -560,14 +566,10 @@ void EmitInst(Container &bytes, X64Instruct ins, R &r, Immdiate &m) {
     bytes.insert(bytes.end(), m.begin(), m.end());
 }
 template<class Container, class R>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const R &m) {
     if(ins.need_Flt()) {
-        if (ins.op1 == ParamST0) {
-            ins.opcode = ins.opcode + (((uint32_t) (m.reg)) << 8);
-        } else {
-            ins.opcode = ins.opcode + (((uint32_t) (r.reg)) << 8);
-        }
-        bytes.insert(bytes.end(), ins.begin(), ins.end());
+        auto re_ins = (ins.op1 == ParamST0) ? ins + RegID(((int) (m.reg)) << 8) : ins + RegID(((int) (r.reg)) << 8);
+        bytes.insert(bytes.end(), re_ins.begin(), re_ins.end());
     } else if (ins.need_ModRM()) {
         EMIT_ASSERT((r.reg != m.reg), "same register error");
         if (NeedREXPrefix(ins.need_REX_W(), r.reg)) {
@@ -582,22 +584,31 @@ void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m) {
     }
 }
 template<class Container, class R, class V>
-void EmitInst(Container &bytes, X64Instruct ins, R &r, R &m, V &imm) {
+inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const R &m, V &imm) {
     EmitInst(bytes, ins, r, m);
     bytes.insert(bytes.end(), imm.begin(), imm.end());
 }
 
 template<class T, class ...K>
 bool Emit(T &bytes, const char *name, K... op) {
-    auto ins = GetInstruct(name, (op.type())...);
-    if (ins.empty()) {
+    auto instr = GetInstruct(name, (op.type())...);
+    if (instr.empty()) {
         return false;
     }
-    if (ins.need_Override()) {
+    if (instr.need_Override()) {
         bytes.push_back(OperandOverridePrefix);
     }
-    EmitInst(bytes, ins, op...);
+    EmitInst(bytes, instr, op...);
     return true;
+}
+
+template<class T, class... OpType>
+void X64Instruct::emit(T &buffer, OpType... args) {
+    auto instr = *this;
+    if (instr.need_Override()) {
+        buffer.push_back(OperandOverridePrefix);
+    }
+    EmitInst(buffer, instr, args...);
 }
 
 #endif //X64ASSEMBLER_TINY_ASM_H

@@ -30,6 +30,9 @@ int main() {
     }
     bytes.clear();
     std::cout << std::endl;
+    // Find Instruction And Emit
+    auto add_instr = GetInstruct("add", ParamReg64, ParamImm32);
+    EmitInst(bytes, add_instr, Reg::rcx(), Imm(1, Size32));
     return 0;
 }
 ```

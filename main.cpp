@@ -12,7 +12,12 @@ int main() {
     Emit(bytes, "leave");
     Emit(bytes, "ret");
 
-    //Emit(bytes, "jmp", Addr::QWord(0, Reg::r(11), Reg::rcx()));
+    // Find Instruction And Emit
+    auto add_instr = GetInstruct("add", ParamReg64, ParamImm32);
+    add_instr.emit(bytes, Reg::rcx(), Imm(1, Size32));
+
+    //Emit(bytes, "push", Imm(1234));
+
     for (auto &byte : bytes) {
         std::cout << (int) byte << ",";
     }
