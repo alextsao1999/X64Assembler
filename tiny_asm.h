@@ -220,9 +220,9 @@ constexpr bool StringEquals(char const * a, char const * b) {
 struct STReg {
     RegID reg;
     STReg() = default;
-    STReg(RegID reg) : reg(reg) {}
-    STReg(int reg) : reg((RegID)reg) {}
-    inline InstrParamType type() const {
+    constexpr STReg(RegID reg) : reg(reg) {}
+    constexpr STReg(int reg) : reg((RegID)reg) {}
+    constexpr InstrParamType type() const {
         if (reg == RegID::st0) {
             return (InstrParamType) (ParamST0);
         }
@@ -232,21 +232,24 @@ struct STReg {
 struct MMReg {
     RegID reg;
     MMReg() = default;
-    MMReg(RegID reg) : reg(reg) {}
-    MMReg(int reg) : reg((RegID)reg) {}
-    inline InstrParamType type() const { return ParamMM; }
+    constexpr MMReg(RegID reg) : reg(reg) {}
+    constexpr MMReg(int reg) : reg((RegID)reg) {}
+    constexpr InstrParamType type() const { return ParamMM; }
 };
 struct XMMReg {
     RegID reg;
     XMMReg() = default;
-    XMMReg(RegID reg) : reg(reg) {}
-    XMMReg(int reg) : reg((RegID)reg) {}
-    inline InstrParamType type() const { return ParamXMM; }
+    constexpr XMMReg(RegID reg) : reg(reg) {}
+    constexpr XMMReg(int reg) : reg((RegID)reg) {}
+    constexpr InstrParamType type() { return ParamXMM; }
 };
 struct Register {
     SizeBit size;
     RegID reg;
-    inline InstrParamType type() const {
+    Register() = default;
+    constexpr Register(SizeBit size, RegID reg) : size(size), reg(reg) {}
+    inline bool empty() const { return size == Size0; }
+    constexpr inline InstrParamType type() const {
         if (reg == RegID::ax) {
             return (InstrParamType) (ParamRegA | size);
         }
@@ -255,32 +258,6 @@ struct Register {
         }
         return (InstrParamType) (ParamReg | size);
     }
-    Register() = default;
-    constexpr Register(SizeBit size, RegID reg) : size(size), reg(reg) {}
-    inline bool empty() const { return size == Size0; }
-    constexpr static Register al() { return {SizeBit::Size8, RegID::ax}; }
-    constexpr static Register bl() { return {SizeBit::Size8, RegID::bx}; }
-    constexpr static Register cl() { return {SizeBit::Size8, RegID::cx}; }
-    constexpr static Register dl() { return {SizeBit::Size8, RegID::dx}; }
-    constexpr static Register ah() { return {SizeBit::Size8, RegID::ah}; }
-    constexpr static Register bh() { return {SizeBit::Size8, RegID::bh}; }
-    constexpr static Register ch() { return {SizeBit::Size8, RegID::ch}; }
-    constexpr static Register dh() { return {SizeBit::Size8, RegID::dh}; }
-    constexpr static Register eax() { return {SizeBit::Size32, RegID::ax}; }
-    constexpr static Register ebx() { return {SizeBit::Size32, RegID::bx}; }
-    constexpr static Register ecx() { return {SizeBit::Size32, RegID::cx}; }
-    constexpr static Register edx() { return {SizeBit::Size32, RegID::dx}; }
-    constexpr static Register esp() { return {SizeBit::Size32, RegID::sp}; }
-    constexpr static Register ebp() { return {SizeBit::Size32, RegID::bp}; }
-    constexpr static Register rax() { return {SizeBit::Size64, RegID::ax}; }
-    constexpr static Register rbx() { return {SizeBit::Size64, RegID::bx}; }
-    constexpr static Register rcx() { return {SizeBit::Size64, RegID::cx}; }
-    constexpr static Register rdx() { return {SizeBit::Size64, RegID::dx}; }
-    constexpr static Register rbp() { return {SizeBit::Size64, RegID::bp}; }
-    constexpr static Register rsp() { return {SizeBit::Size64, RegID::sp}; }
-    constexpr static Register rdi() { return {SizeBit::Size64, RegID::di}; }
-    constexpr static Register rsi() { return {SizeBit::Size64, RegID::si}; }
-    constexpr static Register r(int id = 0) { return {SizeBit::Size64, (RegID) id}; }
 };
 struct Address {
     SizeBit size;
@@ -288,13 +265,14 @@ struct Address {
     Register index;
     Scale scale;
     int32_t disp;
-    Address(SizeBit size, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1, int32_t disp = 0) :
+    Address(SizeBit size, Register base, Register index = {Size0, RegID::SIB_Index_None},
+                      Scale scale = Scale1, int32_t disp = 0) :
             size(size), base(base), index(index), scale(scale), disp(disp) {
         if (disp < 0) {
             this->disp = ValidByte(DispByte(-disp)) + disp;
         }
     }
-    inline InstrParamType type() const {
+    constexpr InstrParamType type() const {
         return (InstrParamType) (ParamMem | size);
     }
     inline Mode get_mode() const {
@@ -320,16 +298,16 @@ struct Address {
             return base.size != Size0;
         }
     }
-    static Address Byte(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
+    static Address byte(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size8, base, index, scale, disp};
     }
-    static Address Word(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
+    static Address word(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size16, base, index, scale, disp};
     }
-    static Address DWord(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
+    static Address dword(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size32, base, index, scale, disp};
     }
-    static Address QWord(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
+    static Address qword(int32_t disp, Register base, Register index = {Size0, RegID::SIB_Index_None}, Scale scale = Scale1) {
         return {Size64, base, index, scale, disp};
     }
 };
@@ -346,7 +324,7 @@ struct Immdiate {
             this->immdiate = (ValidByte(SizeBitByte(this->size)) + immdiate);
         }
     }
-    inline InstrParamType type() const {
+    constexpr InstrParamType type() const {
         return (InstrParamType) (ParamImm | size);
     }
     inline uint32_t length() const {
@@ -354,9 +332,12 @@ struct Immdiate {
     }
     inline uint8_t *begin() const { return (uint8_t *) (&immdiate); }
     inline uint8_t *end() const { return begin() + length(); }
-    static inline Immdiate Byte(int32_t imm) { return {imm, Size8}; }
-    static inline Immdiate Word(int32_t imm) { return {imm, Size16}; }
-    static inline Immdiate DWord(int32_t imm) { return {imm, Size32}; }
+    template <class T>
+    static inline Immdiate byte(const T &imm) { return {(int32_t)imm, Size8}; }
+    template <class T>
+    static inline Immdiate word(const T &imm) { return {(int32_t)imm, Size16}; }
+    template <class T>
+    static inline Immdiate dword(const T &imm) { return {(int32_t) imm, Size32}; }
 };
 struct RelOffset {
     SizeBit size;
@@ -371,20 +352,15 @@ struct RelOffset {
             this->offset = (ValidByte(SizeBitByte(this->size)) + offset);
         }
     }
-    inline InstrParamType type() const {
+    constexpr InstrParamType type() const {
         return (InstrParamType) (ParamRel | size);
     }
     inline uint32_t length() const {
         return SizeBitByte(size);
     }
-    inline uint8_t *begin() const { return (uint8_t *) (&offset); }
-    inline uint8_t *end() const { return begin() + length(); }
-
+    uint8_t *begin() const { return (uint8_t *) (&offset); }
+    uint8_t *end() const { return begin() + length(); }
 };
-using Reg = Register;
-using Addr = Address;
-using Imm = Immdiate;
-using Rel = RelOffset;
 struct X64Instruct {
     const char *name;
     int mod;
@@ -411,7 +387,6 @@ struct X64Instruct {
     template<class T, class ...OpType>
     inline void emit(T &buffer, OpType ...args);
 };
-
 static X64Instruct Instructs[] = {
     #include "instructions.h"
 };
@@ -565,26 +540,30 @@ inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const Immdia
     }
     bytes.insert(bytes.end(), m.begin(), m.end());
 }
-template<class Container, class R>
-inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const R &m) {
+template<class Container, class R1, class R2>
+inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m) {
     if(ins.need_Flt()) {
         auto re_ins = (ins.op1 == ParamST0) ? ins + RegID(((int) (m.reg)) << 8) : ins + RegID(((int) (r.reg)) << 8);
         bytes.insert(bytes.end(), re_ins.begin(), re_ins.end());
     } else if (ins.need_ModRM()) {
-        EMIT_ASSERT((r.reg != m.reg), "same register error");
-        if (NeedREXPrefix(ins.need_REX_W(), r.reg)) {
-            bytes.push_back(REXPrefix(ins.need_REX_W(), r.reg, m.reg));
+        RegID reg = r.reg;
+        RegID rm = m.reg;
+        if (ins.op1 & ParamMem) {
+            std::swap(reg, rm);
+        }
+        if (NeedREXPrefix(ins.need_REX_W(), reg)) {
+            bytes.push_back(REXPrefix(ins.need_REX_W(), reg, rm));
         }
         bytes.insert(bytes.end(), ins.begin(), ins.end());
-        bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg)); // Mode_Reg
+        bytes.push_back(ModRM(Mode_Reg, reg, rm)); // Mode_Reg
     } else {
         // xmm/mm/st
         bytes.insert(bytes.end(), ins.begin(), ins.end());
         bytes.push_back(ModRM(Mode_Reg, r.reg, m.reg));
     }
 }
-template<class Container, class R, class V>
-inline void EmitInst(Container &bytes, X64Instruct ins, const R &r, const R &m, V &imm) {
+template<class Container, class R1, class R2, class V>
+inline void EmitInst(Container &bytes, X64Instruct ins, const R1 &r, const R2 &m, V &imm) {
     EmitInst(bytes, ins, r, m);
     bytes.insert(bytes.end(), imm.begin(), imm.end());
 }
@@ -609,6 +588,40 @@ void X64Instruct::emit(T &buffer, OpType... args) {
         buffer.push_back(OperandOverridePrefix);
     }
     EmitInst(buffer, instr, args...);
+}
+
+namespace Emitter {
+    constexpr static Register al = {SizeBit::Size8, RegID::ax};
+    constexpr static Register bl = {SizeBit::Size8, RegID::bx};
+    constexpr static Register cl = {SizeBit::Size8, RegID::cx};
+    constexpr static Register dl = {SizeBit::Size8, RegID::dx};
+    constexpr static Register ah = {SizeBit::Size8, RegID::ah};
+    constexpr static Register bh = {SizeBit::Size8, RegID::bh};
+    constexpr static Register ch = {SizeBit::Size8, RegID::ch};
+    constexpr static Register dh = {SizeBit::Size8, RegID::dh};
+    constexpr static Register eax = {SizeBit::Size32, RegID::ax};
+    constexpr static Register ebx = {SizeBit::Size32, RegID::bx};
+    constexpr static Register ecx = {SizeBit::Size32, RegID::cx};
+    constexpr static Register edx = {SizeBit::Size32, RegID::dx};
+    constexpr static Register esp = {SizeBit::Size32, RegID::sp};
+    constexpr static Register ebp = {SizeBit::Size32, RegID::bp};
+    constexpr static Register edi = {SizeBit::Size32, RegID::di};
+    constexpr static Register esi = {SizeBit::Size32, RegID::si};
+    constexpr static Register rax = {SizeBit::Size64, RegID::ax};
+    constexpr static Register rcx = {SizeBit::Size64, RegID::cx};
+    constexpr static Register rdx = {SizeBit::Size64, RegID::dx};
+    constexpr static Register rbx = {SizeBit::Size64, RegID::bx};
+    constexpr static Register rbp = {SizeBit::Size64, RegID::bp};
+    constexpr static Register rsp = {SizeBit::Size64, RegID::sp};
+    constexpr static Register rdi = {SizeBit::Size64, RegID::di};
+    constexpr static Register rsi = {SizeBit::Size64, RegID::si};
+    constexpr static Register r(int id = 0) { return {SizeBit::Size64, (RegID) id}; }
+    using addr = Address;
+    using mem = Address;
+    using imm = Immdiate;
+    using rel = RelOffset;
+    using xmm = XMMReg;
+    using mm = MMReg;
 }
 
 #endif //X64ASSEMBLER_TINY_ASM_H
